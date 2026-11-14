@@ -234,25 +234,39 @@ private fun EditorState.onDoubleTap(id: String) {
 
 // MARK: Selection geometry (screen space)
 
+/**
+ * Handle centres in screen space: 0 TL, 1 T, 2 TR, 3 R, 4 BR, 5 B, 6 BL, 7 L.
+ * Corners resize both dimensions; the edge handles (odd indices) resize only height (T, B)
+ * or only width (L, R). On small layers the edge handles sit just outside the box so the
+ * middle stays free for dragging.
+ */
 private fun handlePoints(state: EditorState, node: Node): List<Offset> {
     val r = node.rect
+    val push = sidePush(state, node)
     val pts = listOf(
-        Offset(r.left, r.top), Offset(r.center.x, r.top), Offset(r.right, r.top), Offset(r.right, r.center.y),
-        Offset(r.right, r.bottom), Offset(r.center.x, r.bottom), Offset(r.left, r.bottom), Offset(r.left, r.center.y),
+        Offset(r.left, r.top), Offset(r.center.x, r.top - push.y), Offset(r.right, r.top), Offset(r.right + push.x, r.center.y),
+        Offset(r.right, r.bottom), Offset(r.center.x, r.bottom + push.y), Offset(r.left, r.bottom), Offset(r.left - push.x, r.center.y),
     )
     return pts.map { p -> state.toScreen(if (node.rotation == 0f) p else rotateAround(p, node.center, node.rotation)) }
+}
+
+/** How far (canvas units) to move the edge handles outward: only when the layer is small on screen. */
+private fun sidePush(state: EditorState, node: Node): Offset {
+    val d = state.density
+    val out = 16f * d / state.scale
+    return Offset(
+        if (node.w * state.scale < 56f * d) out else 0f,
+        if (node.h * state.scale < 56f * d) out else 0f,
+    )
 }
 
 private fun handleAt(state: EditorState, node: Node, screen: Offset): Int {
     if (node.locked) return -1
     val radius = 22f * state.density
     val pts = handlePoints(state, node)
-    // Tiny nodes: only corners, so the middle stays draggable.
-    val small = node.w * state.scale < 48f * state.density || node.h * state.scale < 48f * state.density
     var best = -1
     var bestD = Float.MAX_VALUE
     pts.forEachIndexed { i, p ->
-        if (small && i % 2 == 1) return@forEachIndexed
         val d = hypot(p.x - screen.x, p.y - screen.y)
         if (d < radius && d < bestD) { best = i; bestD = d }
     }
@@ -271,11 +285,20 @@ private fun DrawScope.drawSelection(state: EditorState, node: Node, ctx: RenderC
     outline(state, node, Selection, 1.5f)
     if (node.locked) return
     val d = state.density
-    val small = node.w * state.scale < 48f * d || node.h * state.scale < 48f * d
     handlePoints(state, node).forEachIndexed { i, p ->
-        if (small && i % 2 == 1) return@forEachIndexed
-        drawCircle(Color.White, 6f * d, p)
-        drawCircle(Selection, 6f * d, p, style = Stroke(1.5f * d))
+        if (i % 2 == 0) {
+            // Corner: both width and height.
+            drawCircle(Color.White, 6f * d, p)
+            drawCircle(Selection, 6f * d, p, style = Stroke(1.5f * d))
+        } else {
+            // Edge: a pill along the edge; top/bottom change height, left/right change width.
+            val alongEdge = if (i == 1 || i == 5) Size(20f * d, 7f * d) else Size(7f * d, 20f * d)
+            rotate(node.rotation, pivot = p) {
+                val tl = Offset(p.x - alongEdge.width / 2, p.y - alongEdge.height / 2)
+                drawRoundRect(Color.White, tl, alongEdge, CornerRadius(3.5f * d))
+                drawRoundRect(Selection, tl, alongEdge, CornerRadius(3.5f * d), style = Stroke(1.5f * d))
+            }
+        }
     }
     // Size badge under the selection.
     val bottom = state.toScreen(Offset(node.center.x, node.y + node.h))
@@ -283,7 +306,9 @@ private fun DrawScope.drawSelection(state: EditorState, node: Node, ctx: RenderC
     val layout = ctx.layout(label, 11f * d, Color.White, 500)
     val bw = layout.size.width + 12f * d
     val bh = layout.size.height + 6f * d
-    val topLeft = Offset(bottom.x - bw / 2, bottom.y + 10f * d)
+    // Below the bottom edge handle, which sits further out on short layers.
+    val gap = if (node.h * state.scale < 56f * d) 30f * d else 14f * d
+    val topLeft = Offset(bottom.x - bw / 2, bottom.y + gap)
     drawRoundRect(Selection, topLeft, Size(bw, bh), CornerRadius(4f * d))
     drawText(layout, topLeft = topLeft + Offset(6f * d, 3f * d))
 }

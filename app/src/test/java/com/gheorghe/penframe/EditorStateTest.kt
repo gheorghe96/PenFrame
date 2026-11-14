@@ -150,6 +150,24 @@ class EditorStateTest {
         assertEquals(fab, siblings.first().id)
     }
 
+    @Test fun edgeHandlesResizeOneDimension() {
+        val s = editorWithPhone()
+        s.addComponent(ComponentKind.BUTTON_FILLED)
+        val b = s.selected!!
+        // 3 = right edge: width only.
+        s.beginResize(b.id, 3); s.resizeTo(b.id, Offset(40f, 25f)); s.endResize()
+        var r = s.selected!!
+        assertEquals(b.w + 40f, r.w, 0.01f); assertEquals(b.h, r.h, 0.01f); assertEquals(b.x, r.x, 0.01f)
+        // 1 = top edge: height only, growing upward.
+        s.beginResize(b.id, 1); s.resizeTo(b.id, Offset(30f, -10f)); s.endResize()
+        r = s.selected!!
+        assertEquals(b.w + 40f, r.w, 0.01f); assertEquals(b.h + 10f, r.h, 0.01f); assertEquals(b.y - 10f, r.y, 0.01f)
+        // 7 = left edge: width only, growing leftward.
+        s.beginResize(b.id, 7); s.resizeTo(b.id, Offset(-20f, 50f)); s.endResize()
+        r = s.selected!!
+        assertEquals(b.w + 60f, r.w, 0.01f); assertEquals(b.h + 10f, r.h, 0.01f); assertEquals(b.x - 20f, r.x, 0.01f)
+    }
+
     @Test fun changingDeviceKeepsBarsAtTheEdges() {
         val s = editorWithPhone()
         s.changeDevice(s.frame.id, Devices.byId("galaxy-s22-ultra")!!)
