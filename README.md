@@ -16,4 +16,4 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@21
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-`local.properties` points `sdk.dir` at the Android SDK (`/opt/homebrew/share/android-commandlinetools`).
+`local.properties` points `sdk.dir` at your Android SDK.
